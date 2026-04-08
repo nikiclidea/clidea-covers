@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #00365F; overflow: hidden; }
+  canvas { display: block; }
+  #label { position: absolute; bottom: 36px; left: 48px; color: rgba(255,255,255,0.25); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; font-family: 'Inter', sans-serif; pointer-events: none; }
+  #section-title { position: absolute; bottom: 36px; right: 48px; color: rgba(255,255,255,0.95); font-size: 32px; font-weight: 700; letter-spacing: 0.04em; font-family: 'Inter', sans-serif; pointer-events: none; }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label"></div>
+<div id="section-title"></div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+resize();
+window.addEventListener('resize', () => { resize(); assignTargets(); });
+
+const N = 600;
+const COLS = ['#008BC8','#008BC8','#3AAEE0','#5BC4F0','#FFFFFF','#FFFFFF','#7DD6F5','#00B4FF'];
+let particles = [], mouse = { x:-9999, y:-9999, active:false };
+let currentShape = 0, targets = [], phase = 'forming', phaseTimer = 0;
+const FORM_FRAMES = 90, FORMED_FRAMES = 200, DISP_FRAMES = 70;
+const SHAPES = ['person','contract','computer'];
+
+// All shapes fit within a 220x220 box centered on cx,cy
+function lp(x1,y1,x2,y2,n){const p=[];for(let i=0;i<n;i++){const t=i/(n-1);p.push({x:x1+(x2-x1)*t,y:y1+(y2-y1)*t});}return p;}
+function arc(cx,cy,r,a1,a2,n){const p=[];for(let i=0;i<n;i++){const a=a1+(a2-a1)*(i/(n-1));p.push({x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r});}return p;}
+
+function getShape(type, cx, cy, sc) {
+  const pts = [];
+  const S = 110 * sc; // half-size: all shapes fit in [-S,S] x [-S,S]
+
+  if (type === 'person') {
+    const hr = S*0.28;
+    const headY = cy - S*0.52;
+    // head
+    pts.push(...arc(cx, headY, hr, 0, Math.PI*2, 60));
+    for(let i=0;i<50;i++){const a=Math.random()*Math.PI*2,r=Math.random()*hr*0.85;pts.push({x:cx+Math.cos(a)*r,y:headY+Math.sin(a)*r});}
+    // torso
+    const tTop=headY+hr+4*sc, tBot=cy+S*0.3, tW=S*0.45;
+    for(let i=0;i<80;i++){const t=i/79;const hw=tW*(0.6+0.4*t);pts.push({x:cx-hw/2+Math.random()*hw,y:tTop+t*(tBot-tTop)});}
+    // arms
+    for(let i=0;i<40;i++){const t=i/39;pts.push({x:cx-tW/2-t*S*0.18+(Math.random()-0.5)*6*sc,y:tTop+t*(tBot-tTop)*0.9});}
+    for(let i=0;i<40;i++){const t=i/39;pts.push({x:cx+tW/2+t*S*0.18+(Math.random()-0.5)*6*sc,y:tTop+t*(tBot-tTop)*0.9});}
+    // legs
+    for(let i=0;i<50;i++){const t=i/49;pts.push({x:cx-S*0.16+(Math.random()-0.5)*12*sc,y:tBot+t*S*0.42});pts.push({x:cx+S*0.16+(Math.random()-0.5)*12*sc,y:tBot+t*S*0.42});}
+  }
+
+  else if (type === 'contract') {
+    const dw=S*1.1, dh=S*1.7, dl=cx-dw/2, dt=cy-dh/2, dr=cx+dw/2, db=cy+dh/2;
+    const fold=dw*0.28;
+    // outline with folded corner
+    pts.push(...lp(dl,dt, dr-fold,dt, 30));
+    pts.push(...lp(dr-fold,dt, dr,dt+fold, 10));
+    pts.push(...lp(dr,dt+fold, dr,db, 40));
+    pts.push(...lp(dr,db, dl,db, 30));
+    pts.push(...lp(dl,db, dl,dt, 40));
+    pts.push(...lp(dr-fold,dt, dr-fold,dt+fold, 8));
+    pts.push(...lp(dr-fold,dt+fold, dr,dt+fold, 8));
+    // text lines
+    for(let row=0;row<9;row++){
+      const ly=dt+fold*1.4+row*dh*0.085;
+      const lw=row===3||row===7?dw*0.45:dw*0.78;
+      pts.push(...lp(dl+dw*0.1,ly, dl+dw*0.1+lw,ly, 14));
+    }
+    // signature line
+    pts.push(...lp(dl+dw*0.08, db-dh*0.08, dl+dw*0.55, db-dh*0.08, 18));
+    // fill
+    for(let i=0;i<60;i++) pts.push({x:dl+6*sc+Math.random()*(dw-12*sc),y:dt+fold+Math.random()*(dh-fold-6*sc)});
+  }
+
+  else if (type === 'computer') {
+    // monitor: fits within S*2 wide, S*1.6 tall total
+    const mw=S*1.8, mh=S*1.1, ml=cx-mw/2, mt=cy-S*0.85, mr=cx+mw/2, mb=mt+mh;
+    // screen border
+    pts.push(...lp(ml,mt, mr,mt, 40));
+    pts.push(...lp(mr,mt, mr,mb, 25));
+    pts.push(...lp(mr,mb, ml,mb, 40));
+    pts.push(...lp(ml,mb, ml,mt, 25));
+    // screen inner bezel
+    const bz=12*sc;
+    pts.push(...lp(ml+bz,mt+bz, mr-bz,mt+bz, 36));
+    pts.push(...lp(mr-bz,mt+bz, mr-bz,mb-bz, 22));
+    pts.push(...lp(mr-bz,mb-bz, ml+bz,mb-bz, 36));
+    pts.push(...lp(ml+bz,mb-bz, ml+bz,mt+bz, 22));
+    // screen content lines
+    for(let row=0;row<5;row++){
+      const ly=mt+bz*2.5+row*(mh-bz*3)/5;
+      const lw=row===2?mw*0.4:mw*0.65;
+      pts.push(...lp(ml+bz*2,ly, ml+bz*2+lw,ly, 14));
+    }
+    // fill screen
+    for(let i=0;i<60;i++) pts.push({x:ml+bz+Math.random()*(mw-bz*2),y:mt+bz+Math.random()*(mh-bz*2)});
+    // stand stem
+    pts.push(...lp(cx-8*sc,mb, cx-8*sc,mb+S*0.35, 12));
+    pts.push(...lp(cx+8*sc,mb, cx+8*sc,mb+S*0.35, 12));
+    // base
+    const bw=S*0.9;
+    pts.push(...lp(cx-bw/2,mb+S*0.35, cx+bw/2,mb+S*0.35, 24));
+    // keyboard
+    const kw=S*1.6, kh=S*0.25, kl=cx-kw/2, kt=mb+S*0.42;
+    pts.push(...lp(kl,kt, kl+kw,kt, 36));
+    pts.push(...lp(kl+kw,kt, kl+kw,kt+kh, 8));
+    pts.push(...lp(kl+kw,kt+kh, kl,kt+kh, 36));
+    pts.push(...lp(kl,kt+kh, kl,kt, 8));
+    for(let row=0;row<2;row++) for(let col=0;col<8;col++) {
+      pts.push({x:kl+kw*0.06+col*(kw*0.11),y:kt+kh*0.3+row*kh*0.4});
+    }
+  }
+
+  return pts;
+}
+
+function buildTargets(){
+  const cx=W/2,cy=H/2-20,sc=Math.min(W,H)/900;
+  let pts=getShape(SHAPES[currentShape],cx,cy,sc);
+  while(pts.length<N)pts.push(pts[Math.floor(Math.random()*pts.length)]);
+  return pts.slice(0,N);
+}
+function assignTargets(){targets=buildTargets();for(let i=0;i<N;i++){particles[i].tx=targets[i].x;particles[i].ty=targets[i].y;}}
+function initParticles(){particles=[];for(let i=0;i<N;i++)particles.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*2,r:Math.random()*2+1,col:COLS[Math.floor(Math.random()*COLS.length)],alpha:Math.random()*0.4+0.6,tx:0,ty:0});}
+initParticles();assignTargets();
+
+canvas.addEventListener('mouseenter',()=>{mouse.active=true;});
+canvas.addEventListener('mouseleave',()=>{mouse.active=false;mouse.x=-9999;mouse.y=-9999;phase='dispersing';phaseTimer=0;});
+canvas.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+function lerp(a,b,t){return a+(b-a)*t;}
+
+function tick(){
+  ctx.fillStyle='rgba(0,54,95,0.82)';ctx.fillRect(0,0,W,H);phaseTimer++;
+  if(mouse.active){
+    for(let i=0;i<N;i++){const p=particles[i];const dx=mouse.x-p.x,dy=mouse.y-p.y,d=Math.sqrt(dx*dx+dy*dy)+1;const f=Math.min(200/d,5);p.vx+=(dx/d)*f*0.1;p.vy+=(dy/d)*f*0.1;p.vx*=0.87;p.vy*=0.87;p.x+=p.vx;p.y+=p.vy;}
+  } else {
+    if(phase==='forming'){const ease=Math.min(phaseTimer/FORM_FRAMES,1);for(let i=0;i<N;i++){const p=particles[i],sp=0.055+ease*0.03;p.x=lerp(p.x,p.tx,sp);p.y=lerp(p.y,p.ty,sp);p.vx*=0.9;p.vy*=0.9;}if(phaseTimer>=FORM_FRAMES){phase='formed';phaseTimer=0;}}
+    else if(phase==='formed'){for(let i=0;i<N;i++){const p=particles[i];p.x+=(p.tx-p.x)*0.07+(Math.random()-0.5)*0.25;p.y+=(p.ty-p.y)*0.07+(Math.random()-0.5)*0.25;}if(phaseTimer>=FORMED_FRAMES){phase='dispersing';phaseTimer=0;}}
+    else{for(let i=0;i<N;i++){const p=particles[i];p.vx+=(Math.random()-0.5)*0.7;p.vy+=(Math.random()-0.5)*0.7;p.vx*=0.93;p.vy*=0.93;p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;}if(phaseTimer>=DISP_FRAMES){currentShape=(currentShape+1)%SHAPES.length;assignTargets();phase='forming';phaseTimer=0;}}
+  }
+  for(let i=0;i<N;i++){const p=particles[i];ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.col;ctx.globalAlpha=p.alpha;ctx.fill();}
+  ctx.globalAlpha=1;requestAnimationFrame(tick);
+}
+tick();
+</script>
+</body>
+</html>
