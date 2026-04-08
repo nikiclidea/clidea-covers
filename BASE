@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #00365F; overflow: hidden; }
+  canvas { display: block; }
+  #label { position: absolute; bottom: 36px; left: 48px; color: rgba(255,255,255,0.25); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; font-family: 'Inter', sans-serif; pointer-events: none; }
+  #section-title { position: absolute; bottom: 36px; right: 48px; color: rgba(255,255,255,0.95); font-size: 32px; font-weight: 700; letter-spacing: 0.04em; font-family: 'Inter', sans-serif; pointer-events: none; }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label"></div>
+<div id="section-title"></div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+resize();
+window.addEventListener('resize',()=>{resize();assignTargets();});
+
+const N=600;
+const COLS=['#008BC8','#008BC8','#3AAEE0','#5BC4F0','#FFFFFF','#FFFFFF','#7DD6F5','#00B4FF'];
+let particles=[],mouse={x:-9999,y:-9999,active:false};
+let currentShape=0,targets=[],phase='forming',phaseTimer=0;
+const FORM_FRAMES=90,FORMED_FRAMES=200,DISP_FRAMES=70;
+const SHAPES=['bulb','book','pencil'];
+
+function lp(x1,y1,x2,y2,n){const p=[];for(let i=0;i<n;i++){const t=i/(n-1);p.push({x:x1+(x2-x1)*t,y:y1+(y2-y1)*t});}return p;}
+function arc(cx,cy,r,a1,a2,n){const p=[];for(let i=0;i<n;i++){const a=a1+(a2-a1)*(i/(n-1));p.push({x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r});}return p;}
+
+function getShape(type,cx,cy,sc){
+  const pts=[];
+  const S=110*sc;
+
+  if(type==='bulb'){
+    const br=S*0.75;
+    const bcy=cy-S*0.18;
+    // bulb circle
+    pts.push(...arc(cx,bcy,br,0,Math.PI*2,80));
+    // fill
+    for(let i=0;i<160;i++){const a=Math.random()*Math.PI*2,r=Math.random()*br*0.88;pts.push({x:cx+Math.cos(a)*r,y:bcy+Math.sin(a)*r});}
+    // filament
+    pts.push(...arc(cx,bcy,S*0.2,0,Math.PI*2,28));
+    // neck
+    const nw=S*0.38,necktop=bcy+br-2*sc,neckbot=cy+S*0.72;
+    pts.push(...lp(cx-nw/2,necktop,cx-nw/2,neckbot,14));
+    pts.push(...lp(cx+nw/2,necktop,cx+nw/2,neckbot,14));
+    // base rings
+    for(let b=0;b<3;b++){const by=neckbot+b*S*0.12;const bw2=nw+b*S*0.12;pts.push(...lp(cx-bw2/2,by,cx+bw2/2,by,14));}
+    // rays
+    for(let r=0;r<8;r++){const a=(r/8)*Math.PI*2;pts.push(...lp(cx+Math.cos(a)*(br+6*sc),bcy+Math.sin(a)*(br+6*sc),cx+Math.cos(a)*(br+S*0.26),bcy+Math.sin(a)*(br+S*0.26),6));}
+  }
+
+  else if(type==='book'){
+    const bw=S*1.9,bh=S*1.55,bl=cx-bw/2,bt=cy-bh/2,br2=cx+bw/2,bb=cy+bh/2;
+    const spine=cx;
+    pts.push(...lp(bl,bt,spine-4*sc,bt,22));
+    pts.push(...lp(bl,bt,bl,bb,32));
+    pts.push(...lp(bl,bb,spine-4*sc,bb,22));
+    pts.push(...lp(spine+4*sc,bt,br2,bt,22));
+    pts.push(...lp(br2,bt,br2,bb,32));
+    pts.push(...lp(br2,bb,spine+4*sc,bb,22));
+    for(let i=0;i<22;i++){const t=i/21,y=bt+(bb-bt)*t,curve=Math.sin(t*Math.PI)*7*sc;pts.push({x:spine-curve,y});pts.push({x:spine+curve,y});}
+    for(let row=0;row<7;row++){const ly=bt+S*0.18+row*bh*0.11;pts.push(...lp(bl+S*0.14,ly,spine-S*0.18,ly,14));pts.push(...lp(spine+S*0.18,ly,br2-S*0.14,ly,14));}
+    for(let i=0;i<80;i++){const side=Math.random()>0.5?-1:1;pts.push({x:spine+side*(S*0.1+Math.random()*S*0.72),y:bt+S*0.08+Math.random()*(bh-S*0.16)});}
+    pts.push(...arc(cx,bb,S*0.07,0,Math.PI,12));
+  }
+
+  else if(type==='pencil'){
+    // Pencil pointing down-right at ~30deg, fits in S*2 x S*2
+    const angle=Math.PI/6; // 30 degrees
+    const len=S*1.9, bodyW=S*0.28;
+    const cos=Math.cos(angle),sin=Math.sin(angle);
+    // pencil center runs from top-left to bottom-right
+    const x1=cx-len/2*cos, y1=cy-len/2*sin;
+    const x2=cx+len/2*cos, y2=cy+len/2*sin;
+    // perpendicular vector
+    const px=-sin*bodyW/2, py=cos*bodyW/2;
+    // body sides
+    pts.push(...lp(x1-px,y1-py,x2-px*0.6,y2-py*0.6,40));
+    pts.push(...lp(x1+px,y1+py,x2+px*0.6,y2+py*0.6,40));
+    // eraser end (top-left)
+    const eraserLen=S*0.22;
+    const ex1=x1-cos*eraserLen,ey1=y1-sin*eraserLen;
+    pts.push(...lp(ex1-px,ey1-py,ex1+px,ey1+py,10));
+    pts.push(...lp(ex1-px,ey1-py,x1-px,y1-py,8));
+    pts.push(...lp(ex1+px,ey1+py,x1+px,y1+py,8));
+    // eraser fill
+    for(let i=0;i<20;i++){const t=Math.random();pts.push({x:ex1+cos*t*eraserLen+(Math.random()-0.5)*bodyW*0.7,y:ey1+sin*t*eraserLen+(Math.random()-0.5)*bodyW*0.7});}
+    // ferrule line (band at eraser join)
+    pts.push(...lp(x1-px,y1-py,x1+px,y1+py,10));
+    // tip triangle (bottom-right)
+    const tipLen=S*0.32;
+    const tx=x2+cos*tipLen,ty=y2+sin*tipLen;
+    pts.push(...lp(x2-px*0.6,y2-py*0.6,tx,ty,14));
+    pts.push(...lp(x2+px*0.6,y2+py*0.6,tx,ty,14));
+    // tip fill
+    for(let i=0;i<20;i++){const t=Math.random();const w=0.6*(1-t);pts.push({x:x2+cos*t*tipLen+(Math.random()-0.5)*bodyW*w,y:y2+sin*t*tipLen+(Math.random()-0.5)*bodyW*w});}
+    // body fill
+    for(let i=0;i<120;i++){const t=Math.random();pts.push({x:x1+cos*t*len+(Math.random()-0.5)*bodyW*0.8,y:y1+sin*t*len+(Math.random()-0.5)*bodyW*0.8});}
+    // pencil stripe lines (3 parallel lines along body)
+    for(let s=-1;s<=1;s++){pts.push(...lp(x1+px*s*0.5,y1+py*s*0.5,x2+px*s*0.3,y2+py*s*0.3,30));}
+  }
+
+  return pts;
+}
+
+function buildTargets(){const cx=W/2,cy=H/2-20,sc=Math.min(W,H)/900;let pts=getShape(SHAPES[currentShape],cx,cy,sc);while(pts.length<N)pts.push(pts[Math.floor(Math.random()*pts.length)]);return pts.slice(0,N);}
+function assignTargets(){targets=buildTargets();for(let i=0;i<N;i++){particles[i].tx=targets[i].x;particles[i].ty=targets[i].y;}}
+function initParticles(){particles=[];for(let i=0;i<N;i++)particles.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*2,r:Math.random()*2+1,col:COLS[Math.floor(Math.random()*COLS.length)],alpha:Math.random()*0.4+0.6,tx:0,ty:0});}
+initParticles();assignTargets();
+
+canvas.addEventListener('mouseenter',()=>{mouse.active=true;});
+canvas.addEventListener('mouseleave',()=>{mouse.active=false;mouse.x=-9999;mouse.y=-9999;phase='dispersing';phaseTimer=0;});
+canvas.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+function lerp(a,b,t){return a+(b-a)*t;}
+
+function tick(){
+  ctx.fillStyle='rgba(0,54,95,0.82)';ctx.fillRect(0,0,W,H);phaseTimer++;
+  if(mouse.active){for(let i=0;i<N;i++){const p=particles[i];const dx=mouse.x-p.x,dy=mouse.y-p.y,d=Math.sqrt(dx*dx+dy*dy)+1;const f=Math.min(200/d,5);p.vx+=(dx/d)*f*0.1;p.vy+=(dy/d)*f*0.1;p.vx*=0.87;p.vy*=0.87;p.x+=p.vx;p.y+=p.vy;}}
+  else{
+    if(phase==='forming'){const ease=Math.min(phaseTimer/FORM_FRAMES,1);for(let i=0;i<N;i++){const p=particles[i],sp=0.055+ease*0.03;p.x=lerp(p.x,p.tx,sp);p.y=lerp(p.y,p.ty,sp);p.vx*=0.9;p.vy*=0.9;}if(phaseTimer>=FORM_FRAMES){phase='formed';phaseTimer=0;}}
+    else if(phase==='formed'){for(let i=0;i<N;i++){const p=particles[i];p.x+=(p.tx-p.x)*0.07+(Math.random()-0.5)*0.25;p.y+=(p.ty-p.y)*0.07+(Math.random()-0.5)*0.25;}if(phaseTimer>=FORMED_FRAMES){phase='dispersing';phaseTimer=0;}}
+    else{for(let i=0;i<N;i++){const p=particles[i];p.vx+=(Math.random()-0.5)*0.7;p.vy+=(Math.random()-0.5)*0.7;p.vx*=0.93;p.vy*=0.93;p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;}if(phaseTimer>=DISP_FRAMES){currentShape=(currentShape+1)%SHAPES.length;assignTargets();phase='forming';phaseTimer=0;}}
+  }
+  for(let i=0;i<N;i++){const p=particles[i];ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.col;ctx.globalAlpha=p.alpha;ctx.fill();}
+  ctx.globalAlpha=1;requestAnimationFrame(tick);
+}
+tick();
+</script>
+</body>
+</html>
