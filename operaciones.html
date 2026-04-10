@@ -60,7 +60,7 @@ function getShape(type, cx, cy, sc) {
 }
 
 function buildTargets() {
-  const cx=W/2, cy=H/2, sc=Math.min(W,H)/420;
+  const cx=W/2, cy=H/2, sc=Math.min(W,H)/480;
   let pts=getShape(SHAPES[currentShape],cx,cy,sc);
   while(pts.length<N)pts.push(pts[Math.floor(Math.random()*pts.length)]);
   return pts.slice(0,N);
