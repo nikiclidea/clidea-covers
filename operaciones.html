@@ -4,30 +4,10 @@
 <meta charset="UTF-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #00365F; overflow: hidden; }
-  canvas { display: block; }
-  #label {
-    position: absolute;
-    bottom: 36px;
-    left: 48px;
-    color: rgba(255,255,255,0.25);
-    font-size: 11px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    font-family: 'Inter', sans-serif;
-    pointer-events: none;
-  }
-  #section-title {
-    position: absolute;
-    bottom: 36px;
-    right: 48px;
-    color: rgba(255,255,255,0.95);
-    font-size: 32px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    font-family: 'Inter', sans-serif;
-    pointer-events: none;
-  }
+  html, body { width: 100%; height: 100%; background: #00365F; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #label { position: absolute; bottom: 24px; left: 36px; color: rgba(255,255,255,0.25); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; font-family: 'Inter', sans-serif; pointer-events: none; }
+  #section-title { position: absolute; bottom: 24px; right: 36px; color: rgba(255,255,255,0.95); font-size: 28px; font-weight: 700; letter-spacing: 0.04em; font-family: 'Inter', sans-serif; pointer-events: none; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
@@ -39,245 +19,96 @@
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
-let W = 960, H = 400;
-canvas.width = W; canvas.height = H;
-canvas.style.width = '100%'; canvas.style.height = '100%';
+let W, H;
+function resize() {
+  W = canvas.width = canvas.offsetWidth || window.innerWidth;
+  H = canvas.height = canvas.offsetHeight || window.innerHeight;
+  assignTargets();
+}
+window.addEventListener('resize', resize);
 
 const N = 600;
-// Particle colors: bright on dark blue bg
-const COLS = [
-  '#008BC8','#008BC8','#008BC8',
-  '#3AAEE0','#5BC4F0',
-  '#FFFFFF','#FFFFFF',
-  '#7DD6F5','#00B4FF'
-];
-
-let particles = [];
-let mouse = { x: -9999, y: -9999, active: false };
-let currentShape = 0;
-let targets = [];
-let phase = 'forming';
-let phaseTimer = 0;
-
-const FORM_FRAMES  = 90;
-const FORMED_FRAMES = 200;
-const DISP_FRAMES  = 70;
-
+const COLS = ['#008BC8','#008BC8','#008BC8','#3AAEE0','#5BC4F0','#FFFFFF','#FFFFFF','#7DD6F5','#00B4FF'];
+let particles = [], mouse = { x:-9999, y:-9999, active:false };
+let currentShape = 0, targets = [], phase = 'forming', phaseTimer = 0;
+const FORM_FRAMES = 90, FORMED_FRAMES = 200, DISP_FRAMES = 70;
 const SHAPES = ['gear','flow','target'];
 
 function getShape(type, cx, cy, sc) {
   const pts = [];
-
   if (type === 'gear') {
-    const teeth = 10, r1 = 70*sc, r2 = 95*sc, rhole = 26*sc;
-    const steps = teeth * 8;
-    for (let i = 0; i < steps; i++) {
-      const a = (i/steps)*Math.PI*2;
-      const r = (i % 8 < 4) ? r2 : r1;
-      pts.push({ x: cx+Math.cos(a)*r, y: cy+Math.sin(a)*r });
-    }
-    // fill body
-    for (let i = 0; i < 260; i++) {
-      const a = Math.random()*Math.PI*2;
-      const r = rhole + Math.random()*(r1-rhole-4*sc);
-      pts.push({ x: cx+Math.cos(a)*r, y: cy+Math.sin(a)*r });
-    }
-    // hole edge
-    for (let i = 0; i < 40; i++) {
-      const a = (i/40)*Math.PI*2;
-      pts.push({ x: cx+Math.cos(a)*rhole, y: cy+Math.sin(a)*rhole });
-    }
+    const teeth=10, r1=70*sc, r2=95*sc, rhole=26*sc, steps=teeth*8;
+    for(let i=0;i<steps;i++){const a=(i/steps)*Math.PI*2,r=(i%8<4)?r2:r1;pts.push({x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r});}
+    for(let i=0;i<260;i++){const a=Math.random()*Math.PI*2,r=rhole+Math.random()*(r1-rhole-4*sc);pts.push({x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r});}
+    for(let i=0;i<40;i++){const a=(i/40)*Math.PI*2;pts.push({x:cx+Math.cos(a)*rhole,y:cy+Math.sin(a)*rhole});}
   }
-
   else if (type === 'flow') {
-    const bw = 90*sc, bh = 48*sc, gap = 28*sc;
-    const totalW = 3*bw + 2*gap;
-    const bx = cx - totalW/2;
-    const by = cy - bh/2;
-    // 3 boxes top row
-    for (let b = 0; b < 3; b++) {
-      const x0 = bx + b*(bw+gap);
-      // border
-      for (let i = 0; i < 40; i++) {
-        const t = i/40;
-        pts.push({ x: x0+t*bw, y: by });
-        pts.push({ x: x0+t*bw, y: by+bh });
-        pts.push({ x: x0, y: by+t*bh });
-        pts.push({ x: x0+bw, y: by+t*bh });
-      }
-      // fill
-      for (let i = 0; i < 30; i++)
-        pts.push({ x: x0+4*sc+Math.random()*(bw-8*sc), y: by+6*sc+Math.random()*(bh-12*sc) });
-    }
-    // arrows between boxes
-    for (let b = 0; b < 2; b++) {
-      const ax = bx + (b+1)*(bw+gap) - gap/2 - 4*sc;
-      const ay = by + bh/2;
-      for (let i = 0; i < 10; i++)
-        pts.push({ x: ax+i*2.4*sc, y: ay });
-      // arrowhead
-      for (let i = 0; i < 6; i++) {
-        pts.push({ x: ax+gap*0.7+i*sc, y: ay-(i*0.7)*sc });
-        pts.push({ x: ax+gap*0.7+i*sc, y: ay+(i*0.7)*sc });
-      }
-    }
-    // connector lines going down
-    const midX = cx;
-    for (let i = 0; i < 20; i++)
-      pts.push({ x: midX, y: by+bh+i*2.2*sc });
-    // bottom box
-    const bby = by+bh+44*sc, bbw = 110*sc, bbh = 50*sc;
-    for (let i = 0; i < 40; i++) {
-      const t = i/40;
-      pts.push({ x: midX-bbw/2+t*bbw, y: bby });
-      pts.push({ x: midX-bbw/2+t*bbw, y: bby+bbh });
-      pts.push({ x: midX-bbw/2, y: bby+t*bbh });
-      pts.push({ x: midX+bbw/2, y: bby+t*bbh });
-    }
-    for (let i = 0; i < 30; i++)
-      pts.push({ x: midX-bbw/2+6+Math.random()*(bbw-12), y: bby+6+Math.random()*(bbh-12) });
+    const bw=90*sc,bh=48*sc,gap=28*sc,totalW=3*bw+2*gap,bx=cx-totalW/2,by=cy-bh/2-20*sc;
+    for(let b=0;b<3;b++){const x0=bx+b*(bw+gap);for(let i=0;i<40;i++){const t=i/40;pts.push({x:x0+t*bw,y:by});pts.push({x:x0+t*bw,y:by+bh});pts.push({x:x0,y:by+t*bh});pts.push({x:x0+bw,y:by+t*bh});}for(let i=0;i<30;i++)pts.push({x:x0+4*sc+Math.random()*(bw-8*sc),y:by+6*sc+Math.random()*(bh-12*sc)});}
+    for(let b=0;b<2;b++){const ax=bx+(b+1)*(bw+gap)-gap/2-4*sc,ay=by+bh/2;for(let i=0;i<10;i++)pts.push({x:ax+i*2.4*sc,y:ay});for(let i=0;i<6;i++){pts.push({x:ax+gap*0.7+i*sc,y:ay-(i*0.7)*sc});pts.push({x:ax+gap*0.7+i*sc,y:ay+(i*0.7)*sc});}}
+    const midX=cx;for(let i=0;i<20;i++)pts.push({x:midX,y:by+bh+i*2.2*sc});
+    const bby=by+bh+44*sc,bbw=110*sc,bbh=50*sc;for(let i=0;i<40;i++){const t=i/40;pts.push({x:midX-bbw/2+t*bbw,y:bby});pts.push({x:midX-bbw/2+t*bbw,y:bby+bbh});pts.push({x:midX-bbw/2,y:bby+t*bbh});pts.push({x:midX+bbw/2,y:bby+t*bbh});}
+    for(let i=0;i<30;i++)pts.push({x:midX-bbw/2+6+Math.random()*(bbw-12),y:bby+6+Math.random()*(bbh-12)});
   }
-
   else if (type === 'target') {
-    const rings = [38*sc, 68*sc, 98*sc, 128*sc];
-    const counts = [24, 44, 64, 84];
-    rings.forEach((r,ri) => {
-      for (let i = 0; i < counts[ri]; i++) {
-        const a = (i/counts[ri])*Math.PI*2;
-        pts.push({ x: cx+Math.cos(a)*r, y: cy+Math.sin(a)*r });
-      }
-    });
-    // crosshairs
-    for (let i = -7; i <= 7; i++) {
-      if (Math.abs(i) < 1) continue;
-      pts.push({ x: cx+i*18*sc, y: cy });
-      pts.push({ x: cx, y: cy+i*18*sc });
-    }
-    // center dot cluster
-    for (let i = 0; i < 16; i++) {
-      const a = Math.random()*Math.PI*2, r = Math.random()*18*sc;
-      pts.push({ x: cx+Math.cos(a)*r, y: cy+Math.sin(a)*r });
-    }
+    const rings=[38*sc,68*sc,98*sc,128*sc],counts=[24,44,64,84];
+    rings.forEach((r,ri)=>{for(let i=0;i<counts[ri];i++){const a=(i/counts[ri])*Math.PI*2;pts.push({x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r});}});
+    for(let i=-7;i<=7;i++){if(Math.abs(i)<1)continue;pts.push({x:cx+i*18*sc,y:cy});pts.push({x:cx,y:cy+i*18*sc});}
+    for(let i=0;i<16;i++){const a=Math.random()*Math.PI*2,r=Math.random()*18*sc;pts.push({x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r});}
   }
-
   return pts;
 }
 
 function buildTargets() {
-  const cx = W/2, cy = H/2 - 30;
-  const sc = Math.min(W,H)/480;
-  let pts = getShape(SHAPES[currentShape], cx, cy, sc);
-  while (pts.length < N) pts.push(pts[Math.floor(Math.random()*pts.length)]);
-  pts = pts.slice(0, N);
-  return pts;
+  const cx=W/2, cy=H/2, sc=Math.min(W,H)/420;
+  let pts=getShape(SHAPES[currentShape],cx,cy,sc);
+  while(pts.length<N)pts.push(pts[Math.floor(Math.random()*pts.length)]);
+  return pts.slice(0,N);
+}
+function assignTargets(){
+  if(!particles.length)return;
+  targets=buildTargets();
+  for(let i=0;i<N;i++){particles[i].tx=targets[i].x;particles[i].ty=targets[i].y;}
+}
+function initParticles(){
+  particles=[];
+  for(let i=0;i<N;i++)particles.push({x:Math.random()*(W||800),y:Math.random()*(H||400),vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*2,r:Math.random()*2+1,col:COLS[Math.floor(Math.random()*COLS.length)],alpha:Math.random()*0.4+0.6,tx:0,ty:0});
 }
 
-function assignTargets() {
-  targets = buildTargets();
-  for (let i = 0; i < N; i++) {
-    particles[i].tx = targets[i].x;
-    particles[i].ty = targets[i].y;
-  }
+// Mouse coords relative to canvas
+function getMousePos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const scaleY = H / rect.height;
+  return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
 }
-
-function initParticles() {
-  particles = [];
-  for (let i = 0; i < N; i++) {
-    particles.push({
-      x: Math.random()*W,
-      y: Math.random()*H,
-      vx: (Math.random()-0.5)*2,
-      vy: (Math.random()-0.5)*2,
-      r: Math.random()*2+1,        // bigger: 1–3px
-      col: COLS[Math.floor(Math.random()*COLS.length)],
-      alpha: Math.random()*0.4+0.6, // brighter: 0.6–1.0
-      tx: 0, ty: 0
-    });
-  }
-}
-
-initParticles();
-assignTargets();
 
 canvas.addEventListener('mouseenter', () => { mouse.active = true; });
-canvas.addEventListener('mouseleave', () => {
-  mouse.active = false;
-  mouse.x = -9999; mouse.y = -9999;
-  phase = 'dispersing'; phaseTimer = 0;
-});
-canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+canvas.addEventListener('mouseleave', () => { mouse.active=false; mouse.x=-9999; mouse.y=-9999; phase='dispersing'; phaseTimer=0; });
+canvas.addEventListener('mousemove', e => { const p=getMousePos(e); mouse.x=p.x; mouse.y=p.y; });
 
-function lerp(a,b,t){ return a+(b-a)*t; }
+function lerp(a,b,t){return a+(b-a)*t;}
 
-function tick() {
-  // dark bg with slight trail
-  ctx.fillStyle = 'rgba(0,54,95,0.82)';
+function tick(){
+  ctx.fillStyle='rgba(0,54,95,0.82)';
   ctx.fillRect(0,0,W,H);
-
   phaseTimer++;
 
-  if (mouse.active) {
-    for (let i = 0; i < N; i++) {
-      const p = particles[i];
-      const dx = mouse.x-p.x, dy = mouse.y-p.y;
-      const d = Math.sqrt(dx*dx+dy*dy)+1;
-      const f = Math.min(200/d, 5);
-      p.vx += (dx/d)*f*0.1;
-      p.vy += (dy/d)*f*0.1;
-      p.vx *= 0.87; p.vy *= 0.87;
-      p.x += p.vx; p.y += p.vy;
-    }
+  if(mouse.active){
+    for(let i=0;i<N;i++){const p=particles[i];const dx=mouse.x-p.x,dy=mouse.y-p.y,d=Math.sqrt(dx*dx+dy*dy)+1;const f=Math.min(200/d,5);p.vx+=(dx/d)*f*0.1;p.vy+=(dy/d)*f*0.1;p.vx*=0.87;p.vy*=0.87;p.x+=p.vx;p.y+=p.vy;}
   } else {
-    if (phase === 'forming') {
-      const ease = Math.min(phaseTimer/FORM_FRAMES, 1);
-      for (let i = 0; i < N; i++) {
-        const p = particles[i];
-        const sp = 0.055 + ease*0.03;
-        p.x = lerp(p.x, p.tx, sp);
-        p.y = lerp(p.y, p.ty, sp);
-        p.vx *= 0.9; p.vy *= 0.9;
-      }
-      if (phaseTimer >= FORM_FRAMES) { phase = 'formed'; phaseTimer = 0; }
-
-    } else if (phase === 'formed') {
-      for (let i = 0; i < N; i++) {
-        const p = particles[i];
-        p.x += (p.tx-p.x)*0.07 + (Math.random()-0.5)*0.25;
-        p.y += (p.ty-p.y)*0.07 + (Math.random()-0.5)*0.25;
-      }
-      if (phaseTimer >= FORMED_FRAMES) { phase = 'dispersing'; phaseTimer = 0; }
-
-    } else if (phase === 'dispersing') {
-      for (let i = 0; i < N; i++) {
-        const p = particles[i];
-        p.vx += (Math.random()-0.5)*0.7;
-        p.vy += (Math.random()-0.5)*0.7;
-        p.vx *= 0.93; p.vy *= 0.93;
-        p.x += p.vx; p.y += p.vy;
-        if (p.x<0) p.x=W; if (p.x>W) p.x=0;
-        if (p.y<0) p.y=H; if (p.y>H) p.y=0;
-      }
-      if (phaseTimer >= DISP_FRAMES) {
-        currentShape = (currentShape+1) % SHAPES.length;
-        assignTargets();
-        phase = 'forming'; phaseTimer = 0;
-      }
-    }
+    if(phase==='forming'){const ease=Math.min(phaseTimer/FORM_FRAMES,1);for(let i=0;i<N;i++){const p=particles[i],sp=0.055+ease*0.03;p.x=lerp(p.x,p.tx,sp);p.y=lerp(p.y,p.ty,sp);p.vx*=0.9;p.vy*=0.9;}if(phaseTimer>=FORM_FRAMES){phase='formed';phaseTimer=0;}}
+    else if(phase==='formed'){for(let i=0;i<N;i++){const p=particles[i];p.x+=(p.tx-p.x)*0.07+(Math.random()-0.5)*0.25;p.y+=(p.ty-p.y)*0.07+(Math.random()-0.5)*0.25;}if(phaseTimer>=FORMED_FRAMES){phase='dispersing';phaseTimer=0;}}
+    else{for(let i=0;i<N;i++){const p=particles[i];p.vx+=(Math.random()-0.5)*0.7;p.vy+=(Math.random()-0.5)*0.7;p.vx*=0.93;p.vy*=0.93;p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;}if(phaseTimer>=DISP_FRAMES){currentShape=(currentShape+1)%SHAPES.length;assignTargets();phase='forming';phaseTimer=0;}}
   }
 
-  // draw particles
-  for (let i = 0; i < N; i++) {
-    const p = particles[i];
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-    ctx.fillStyle = p.col;
-    ctx.globalAlpha = p.alpha;
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
+  for(let i=0;i<N;i++){const p=particles[i];ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.col;ctx.globalAlpha=p.alpha;ctx.fill();}
+  ctx.globalAlpha=1;
   requestAnimationFrame(tick);
 }
 
+initParticles();
+resize();
 tick();
 </script>
 </body>
