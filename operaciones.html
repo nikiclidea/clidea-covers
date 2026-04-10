@@ -19,13 +19,9 @@
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
-let W, H;
-function resize() {
-  W = canvas.width = canvas.offsetWidth || window.innerWidth;
-  H = canvas.height = canvas.offsetHeight || window.innerHeight;
-  assignTargets();
-}
-window.addEventListener('resize', resize);
+let W = 960, H = 400;
+canvas.width = W; canvas.height = H;
+canvas.style.width = '100%'; canvas.style.height = '100%';
 
 const N = 600;
 const COLS = ['#008BC8','#008BC8','#008BC8','#3AAEE0','#5BC4F0','#FFFFFF','#FFFFFF','#7DD6F5','#00B4FF'];
