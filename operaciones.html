@@ -21,7 +21,7 @@ const ctx = canvas.getContext('2d');
 
 let W = 960, H = 400;
 canvas.width = W; canvas.height = H;
-canvas.style.width = '110%'; canvas.style.height = '110%';
+canvas.style.width = '100%'; canvas.style.height = '100%';
 
 const N = 600;
 const COLS = ['#008BC8','#008BC8','#008BC8','#3AAEE0','#5BC4F0','#FFFFFF','#FFFFFF','#7DD6F5','#00B4FF'];
@@ -56,7 +56,7 @@ function getShape(type, cx, cy, sc) {
 }
 
 function buildTargets() {
-  const cx=W/2, cy=H/2, sc=Math.min(W,H)/480;;
+  const cx=W/2, cy=H/2, sc=Math.min(W,H)/420;
   let pts=getShape(SHAPES[currentShape],cx,cy,sc);
   while(pts.length<N)pts.push(pts[Math.floor(Math.random()*pts.length)]);
   return pts.slice(0,N);
