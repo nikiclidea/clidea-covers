@@ -39,13 +39,9 @@
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
-let W, H;
-function resize() {
-  W = canvas.width = window.innerWidth;
-  H = canvas.height = window.innerHeight;
-}
-resize();
-window.addEventListener('resize', () => { resize(); assignTargets(); });
+let W = 960, H = 400;
+canvas.width = W; canvas.height = H;
+canvas.style.width = '100%'; canvas.style.height = '100%';
 
 const N = 600;
 // Particle colors: bright on dark blue bg
@@ -169,7 +165,7 @@ function getShape(type, cx, cy, sc) {
 
 function buildTargets() {
   const cx = W/2, cy = H/2 - 30;
-  const sc = Math.min(W, H) / 780;
+  const sc = Math.min(W,H)/480;
   let pts = getShape(SHAPES[currentShape], cx, cy, sc);
   while (pts.length < N) pts.push(pts[Math.floor(Math.random()*pts.length)]);
   pts = pts.slice(0, N);
