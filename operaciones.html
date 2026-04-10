@@ -5,7 +5,7 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; background: #00365F; overflow: hidden; }
-  canvas { display: block; width: 100%; height: 100%; }
+  canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; }
   #label { position: absolute; bottom: 24px; left: 36px; color: rgba(255,255,255,0.25); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; font-family: 'Inter', sans-serif; pointer-events: none; }
   #section-title { position: absolute; bottom: 24px; right: 36px; color: rgba(255,255,255,0.95); font-size: 28px; font-weight: 700; letter-spacing: 0.04em; font-family: 'Inter', sans-serif; pointer-events: none; }
 </style>
@@ -18,10 +18,13 @@
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
+let W, H;
 
-let W = 960, H = 400;
-canvas.width = W; canvas.height = H;
-canvas.style.width = '100%'; canvas.style.height = '100%';
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  assignTargets();
+}
 
 const N = 600;
 const COLS = ['#008BC8','#008BC8','#008BC8','#3AAEE0','#5BC4F0','#FFFFFF','#FFFFFF','#7DD6F5','#00B4FF'];
@@ -43,7 +46,8 @@ function getShape(type, cx, cy, sc) {
     for(let b=0;b<3;b++){const x0=bx+b*(bw+gap);for(let i=0;i<40;i++){const t=i/40;pts.push({x:x0+t*bw,y:by});pts.push({x:x0+t*bw,y:by+bh});pts.push({x:x0,y:by+t*bh});pts.push({x:x0+bw,y:by+t*bh});}for(let i=0;i<30;i++)pts.push({x:x0+4*sc+Math.random()*(bw-8*sc),y:by+6*sc+Math.random()*(bh-12*sc)});}
     for(let b=0;b<2;b++){const ax=bx+(b+1)*(bw+gap)-gap/2-4*sc,ay=by+bh/2;for(let i=0;i<10;i++)pts.push({x:ax+i*2.4*sc,y:ay});for(let i=0;i<6;i++){pts.push({x:ax+gap*0.7+i*sc,y:ay-(i*0.7)*sc});pts.push({x:ax+gap*0.7+i*sc,y:ay+(i*0.7)*sc});}}
     const midX=cx;for(let i=0;i<20;i++)pts.push({x:midX,y:by+bh+i*2.2*sc});
-    const bby=by+bh+44*sc,bbw=110*sc,bbh=50*sc;for(let i=0;i<40;i++){const t=i/40;pts.push({x:midX-bbw/2+t*bbw,y:bby});pts.push({x:midX-bbw/2+t*bbw,y:bby+bbh});pts.push({x:midX-bbw/2,y:bby+t*bbh});pts.push({x:midX+bbw/2,y:bby+t*bbh});}
+    const bby=by+bh+44*sc,bbw=110*sc,bbh=50*sc;
+    for(let i=0;i<40;i++){const t=i/40;pts.push({x:midX-bbw/2+t*bbw,y:bby});pts.push({x:midX-bbw/2+t*bbw,y:bby+bbh});pts.push({x:midX-bbw/2,y:bby+t*bbh});pts.push({x:midX+bbw/2,y:bby+t*bbh});}
     for(let i=0;i<30;i++)pts.push({x:midX-bbw/2+6+Math.random()*(bbw-12),y:bby+6+Math.random()*(bbh-12)});
   }
   else if (type === 'target') {
@@ -62,34 +66,28 @@ function buildTargets() {
   return pts.slice(0,N);
 }
 function assignTargets(){
-  if(!particles.length)return;
+  if(!particles.length) return;
   targets=buildTargets();
   for(let i=0;i<N;i++){particles[i].tx=targets[i].x;particles[i].ty=targets[i].y;}
 }
 function initParticles(){
   particles=[];
-  for(let i=0;i<N;i++)particles.push({x:Math.random()*(W||800),y:Math.random()*(H||400),vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*2,r:Math.random()*2+1,col:COLS[Math.floor(Math.random()*COLS.length)],alpha:Math.random()*0.4+0.6,tx:0,ty:0});
+  for(let i=0;i<N;i++)particles.push({x:Math.random()*window.innerWidth,y:Math.random()*window.innerHeight,vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*2,r:Math.random()*2+1,col:COLS[Math.floor(Math.random()*COLS.length)],alpha:Math.random()*0.4+0.6,tx:0,ty:0});
 }
 
-// Mouse coords relative to canvas
-function getMousePos(e) {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = W / rect.width;
-  const scaleY = H / rect.height;
-  return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+function getMousePos(e){
+  const rect=canvas.getBoundingClientRect();
+  return {x:(e.clientX-rect.left)*(W/rect.width),y:(e.clientY-rect.top)*(H/rect.height)};
 }
 
-canvas.addEventListener('mouseenter', () => { mouse.active = true; });
-canvas.addEventListener('mouseleave', () => { mouse.active=false; mouse.x=-9999; mouse.y=-9999; phase='dispersing'; phaseTimer=0; });
-canvas.addEventListener('mousemove', e => { const p=getMousePos(e); mouse.x=p.x; mouse.y=p.y; });
+canvas.addEventListener('mouseenter',()=>{mouse.active=true;});
+canvas.addEventListener('mouseleave',()=>{mouse.active=false;mouse.x=-9999;mouse.y=-9999;phase='dispersing';phaseTimer=0;});
+canvas.addEventListener('mousemove',e=>{const p=getMousePos(e);mouse.x=p.x;mouse.y=p.y;});
 
 function lerp(a,b,t){return a+(b-a)*t;}
 
 function tick(){
-  ctx.fillStyle='rgba(0,54,95,0.82)';
-  ctx.fillRect(0,0,W,H);
-  phaseTimer++;
-
+  ctx.fillStyle='rgba(0,54,95,0.82)';ctx.fillRect(0,0,W,H);phaseTimer++;
   if(mouse.active){
     for(let i=0;i<N;i++){const p=particles[i];const dx=mouse.x-p.x,dy=mouse.y-p.y,d=Math.sqrt(dx*dx+dy*dy)+1;const f=Math.min(200/d,5);p.vx+=(dx/d)*f*0.1;p.vy+=(dy/d)*f*0.1;p.vx*=0.87;p.vy*=0.87;p.x+=p.vx;p.y+=p.vy;}
   } else {
@@ -97,14 +95,13 @@ function tick(){
     else if(phase==='formed'){for(let i=0;i<N;i++){const p=particles[i];p.x+=(p.tx-p.x)*0.07+(Math.random()-0.5)*0.25;p.y+=(p.ty-p.y)*0.07+(Math.random()-0.5)*0.25;}if(phaseTimer>=FORMED_FRAMES){phase='dispersing';phaseTimer=0;}}
     else{for(let i=0;i<N;i++){const p=particles[i];p.vx+=(Math.random()-0.5)*0.7;p.vy+=(Math.random()-0.5)*0.7;p.vx*=0.93;p.vy*=0.93;p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;}if(phaseTimer>=DISP_FRAMES){currentShape=(currentShape+1)%SHAPES.length;assignTargets();phase='forming';phaseTimer=0;}}
   }
-
   for(let i=0;i<N;i++){const p=particles[i];ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.col;ctx.globalAlpha=p.alpha;ctx.fill();}
-  ctx.globalAlpha=1;
-  requestAnimationFrame(tick);
+  ctx.globalAlpha=1;requestAnimationFrame(tick);
 }
 
 initParticles();
 resize();
+window.addEventListener('resize', resize);
 tick();
 </script>
 </body>
